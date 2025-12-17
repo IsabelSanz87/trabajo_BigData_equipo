@@ -1,0 +1,1579 @@
+---
+title: "Análisis de la inflación en España de 2002 a 2025"  #- título
+website:
+  title: "Análisis de la inflación en España (2002–2025)"
+date: 2025-12-12              #- ISO8601 YYYY-MM-DD format 
+date-format: short
+format: 
+  revealjs:
+    theme: simple
+    logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/R_language_logo.svg/120px-R_language_logo.svg.png"
+    slide-number: true
+    scrollable: true
+    slide-level: 2
+    height: 900
+    width: 1600
+    toc: false
+    center-title-slide: true
+    title-slide-attributes: 
+      data-background-color: "#1a4d2e" 
+      data-background-opacity: 0,2
+    preview-links: auto  #- true: abre un iframe en lugar de abrir ventana
+    link-external-newwindow: true
+    transition: fade
+    fontcolor: "#0e3b1e"
+    highlight-style: a11y
+    code-line-numbers: true
+    number-sections: false
+    incremental: false   
+footer: |
+  Slides hechas con [Quarto](https://quarto.org/) 
+#theme: moon
+echo: true
+eval: true
+---
+
+
+
+## Intro {background-color="#f3f4f6"}
+
+::: columns
+::: {.column width="60%"}
+
+### Objetivo
+Este trabajo analiza la evolución de la inflación en España desde 2002 hasta 2025, con especial foco en las diferencias entre comunidades autónomas (CCAA). 
+En los últimos años, destacando la crisis del covid-19 y la energética, esta última a causa del conflicto entre Rusia y Ucrania, la creciente inflación se ha convertido en un debate público y en el punto de mira de las decisisones de las instituciones.
+
+* ⁠*Crisis:* COVID-19 y Energética (Rusia-Ucrania).
+* ⁠*Objetivo ✨:* Mostrar la evolución de la inflación, desgranando las divergencias que se encuentran en España en las comunidades autónomas. 
+:::
+
+::: {.column width="40%"}
+![](https://images.unsplash.com/photo-1580519542036-c47de6196ba5?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80){.r-stretch style="border-radius: 15px; box-shadow: 5px 5px 15px rgba(0,0,0,0.3);"}
+:::
+:::
+
+---
+
+En suma, explicar las causas económicas y consecuencias de este aumento de precios y del descontento general en España, dónde no se escapa ninguna población aislada (ni Pancrudo 😆).
+
+---
+
+## Preparación de los datos:
+
+::: {.panel-tabset}
+
+### Los datos se pueden cargar en la memoria de de RStudio de esta forma:
+
+:::
+
+---
+
+```{r}
+#| label: setup
+#| message: false
+#| warning: false
+#| echo: true
+
+library(tidyverse)
+library(readr)
+library(ggplot2)
+library(ggthemes)
+library(gt)
+library(gtExtras)
+library(dplyr)
+library(sf)
+library(mapSpain)
+library(rio)
+library(plotly)
+library(eurostat)
+library(forcats)
+library(scales)
+
+# DATOS
+
+# En primer lugar creamos la ruta relativa para posteriormente poder descargar los datos.
+ruta_ccaa_inflacion <- "./datos/ccaa_inflacion.csv"
+ccaa_inflacion <- rio::import(ruta_ccaa_inflacion)
+
+ccaa_inflacion <- ccaa_inflacion %>% drop_na()  
+
+ccaa_inflacion_an <- ccaa_inflacion %>% 
+  select(c(2, 3, 4, 5)) %>% 
+  rename(periodo = Periodo, indice= c(1))
+
+ccaa_inflacion_an <- ccaa_inflacion_an %>% 
+  mutate(valor = gsub(",", ".", Total)) 
+
+ccaa_inflacion_an <- ccaa_inflacion_an %>% mutate(periodo = gsub("M12", "", periodo),
+                                            periodo = gsub("M11", "", periodo),
+                                            periodo = gsub("M10", "", periodo),
+                                            periodo = gsub("M09", "", periodo),
+                                            periodo = gsub("M08", "", periodo),
+                                            periodo = gsub("M07", "", periodo),
+                                            periodo = gsub("M06", "", periodo),
+                                            periodo = gsub("M05", "", periodo),
+                                            periodo = gsub("M04", "", periodo),
+                                            periodo = gsub("M03", "", periodo),
+                                            periodo = gsub("M02", "", periodo),
+                                            periodo = gsub("M01", "", periodo),
+                                            indice = str_replace(indice, ".*Variaci.n anual.*", "Var_anual"))
+  
+  ccaa_inflacion_an <- ccaa_inflacion_an %>% rename(ccaa = c(2)) %>% 
+  filter(ccaa %in% "Nacional")
+  
+  ccaa_inflacion_an <- ccaa_inflacion_an %>% filter(indice %in% "Var_anual")
+# Cambiamos los nombres, seleccionamos aquellas columnas que deseamos mantener y cambiamos la notación decimal.
+ccaa_inflacion <- ccaa_inflacion %>% 
+  rename(indice = c(2), ccaa = c(3), periodo = c(4), valor = c(5)) %>%
+  select(c(2,3,4,5)) %>% 
+  mutate(valor = gsub(",", ".", valor))
+
+# Cambiamos los periodos mensuales por nada porque queremos pasar los datos a periodo anual. 
+# También, arreglamos los datos con símbolos extraños.
+ccaa_inflacion <- ccaa_inflacion %>% 
+  mutate(periodo = gsub("M12", "", periodo),
+        periodo = gsub("M11", "", periodo),
+        periodo = gsub("M10", "", periodo),
+        periodo = gsub("M09", "", periodo),
+        periodo = gsub("M08", "", periodo),
+        periodo = gsub("M07", "", periodo),
+        periodo = gsub("M06", "", periodo),
+        periodo = gsub("M05", "", periodo),
+        periodo = gsub("M04", "", periodo),
+        periodo = gsub("M03", "", periodo),
+        periodo = gsub("M02", "", periodo),
+        periodo = gsub("M01", "", periodo),
+        indice = str_replace(indice, ".*ndice.*", "indice"),
+        indice = str_replace(indice, ".*Variaci.n mensual.*", "Var_mens"),
+        indice = str_replace(indice, ".*Variaci.n anual.*", "Var_anual"),
+        ccaa = str_replace(ccaa, ".*16 Pa.s Vasco.*", "PV"),
+        ccaa = str_replace(ccaa, ".*14 Murcia, Regi.n de.*", "Murcia"),
+        ccaa = str_replace(ccaa, ".*01 Andaluc.a.*", "Andalucia"),
+        ccaa = str_replace(ccaa, ".*02 Arag.n.*", "Aragon"),
+        ccaa = str_replace(ccaa, ".*07 Castilla y Le.n.*", "CyL"),
+        ccaa = str_replace(ccaa, ".*09 Catalu.a.*", "CAT"),
+        ccaa = str_replace(ccaa, "03 Asturias, Principado de", "Asturias"),
+        ccaa = str_replace(ccaa, "04 Balears, Illes", "Islas Baleares"),
+        ccaa = str_replace(ccaa, "05 Canarias", "Canarias"),
+        ccaa = str_replace(ccaa, "06 Cantabria", "Cantabria"),
+        ccaa = str_replace(ccaa, "08 Castilla - La Mancha", "Castilla La Mancha"),
+        ccaa = str_replace(ccaa, "10 Comunitat Valenciana", "Comunidad Valenciana"),
+        ccaa = str_replace(ccaa, "11 Extremadura", "Extremadura"),
+        ccaa = str_replace(ccaa, "12 Galicia", "Galicia"),
+        ccaa = str_replace(ccaa, "13 Madrid, Comunidad de", "Madrid"),
+        ccaa = str_replace(ccaa, "15 Navarra, Comunidad Foral de", "Navarra"),
+        ccaa = str_replace(ccaa, "17 Rioja, La", "La Rioja"),
+        ccaa = str_replace(ccaa, "18 Ceuta", "Ceuta"),
+        ccaa = str_replace(ccaa, "19 Melilla", "Melilla"))
+# Pasamos los años y el valor a variables numéricas.
+ccaa_inflacion <- ccaa_inflacion %>% mutate(periodo = as.numeric(periodo),
+                                            valor = as.numeric(valor))
+
+ccaa_inflacion_base2002 <- ccaa_inflacion %>%
+  filter(indice %in% c("indice"),
+         periodo %in% c("2002")) %>% 
+  group_by(ccaa, periodo) %>% 
+  arrange(desc(ccaa)) %>% 
+  summarise(base = mean(valor, na.rm = TRUE)) %>% 
+  select(ccaa, base)
+
+#Calculamos los números índices para cada año, desde el 2002 hasta el 2025
+ccaa_inflacion_25 <- ccaa_inflacion %>% group_by(periodo) %>% 
+  filter(periodo %in% c("2025"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_24 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2024"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_23 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2023"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_22 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2022"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_21 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2021"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_20 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2020"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_19 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2019"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_18 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2018"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_17 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2017"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_16 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2016"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_15 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2015"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_14 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2014"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_13 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2013"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_12 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2012"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_11 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2011"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_10 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2010"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_09 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2009"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_08 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2008"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor) 
+
+ccaa_inflacion_07 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2007"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_06 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2006"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_05 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2005"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_04 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2004"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_03 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2003"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+ccaa_inflacion_02 <- ccaa_inflacion %>% group_by(ccaa, periodo) %>% 
+  filter(periodo %in% c("2002"),
+         indice %in% c("indice")) %>% 
+  mutate(media = mean(valor, na.rm = TRUE)) %>% 
+  full_join(ccaa_inflacion_base2002, by = c("ccaa")) %>% 
+  mutate(valor = (media/base) *100) %>% 
+  distinct() %>% 
+  select(indice, ccaa, valor)
+
+#Una vez calculados los números índice para cada año, fusionamos todas las tablas para tener los datos en un solo data frame.
+original <- full_join(ccaa_inflacion_02, ccaa_inflacion_03)
+
+original <- full_join(original, ccaa_inflacion_04)
+
+original <- full_join(original, ccaa_inflacion_05)
+
+original <- full_join(original, ccaa_inflacion_06)
+
+original <- full_join(original, ccaa_inflacion_07)
+
+original <- full_join(original, ccaa_inflacion_08)
+
+original <- full_join(original, ccaa_inflacion_09)
+
+original <- full_join(original, ccaa_inflacion_10)
+
+original <- full_join(original, ccaa_inflacion_11)
+
+original <- full_join(original, ccaa_inflacion_12)
+
+original <- full_join(original, ccaa_inflacion_13)
+
+original <- full_join(original, ccaa_inflacion_14)
+
+original <- full_join(original, ccaa_inflacion_15)
+
+original <- full_join(original, ccaa_inflacion_16)
+
+original <- full_join(original, ccaa_inflacion_17)
+
+original <- full_join(original, ccaa_inflacion_18)
+
+original <- full_join(original, ccaa_inflacion_19)
+
+original <- full_join(original, ccaa_inflacion_20)
+
+original <- full_join(original, ccaa_inflacion_21)
+
+original <- full_join(original, ccaa_inflacion_22)
+
+original <- full_join(original, ccaa_inflacion_23)
+
+original <- full_join(original, ccaa_inflacion_24)
+
+original <- full_join(original, ccaa_inflacion_25)
+
+```
+
+
+# 1. EVOLUCIÓN GENERAL
+
+
+## 1.1 Gráfico evolución inflación en España:
+
+```{r}
+#| label: plot-nacional
+#| fig-align: center
+#| fig-height: 6
+
+#Mostramos gráficamente la evolución del IPC general en España
+
+plot_nacional <- original %>% 
+  filter(ccaa == "Nacional") %>%     
+  ggplot(aes(x = periodo, y = valor)) +
+  geom_line(linewidth = 1.1, color = "blue") +    
+  labs(
+    title = "Evolución del IPC en España (100 = 2002)",
+    caption = "Elaboración propia a partir del INE",
+    x = "Años",
+    y = "Índice"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  NULL
+
+
+plot_nacional
+
+```
+
+
+---
+
+El gráfico muestra la evolución del Índice de Precios de Consumo (IPC) en España para el período 2002–2025, tomando como base el año 2002, cuyo valor es 100.
+Esta representación permite analizar la *evolución acumulada* de los precios en el conjunto del país y detectar las principales etapas inflacionarias a lo largo del tiempo.
+En términos generales, se observa una tendencia creciente del índice, lo que indica un aumento sostenido del nivel de precios durante el período analizado. Entre los años 2002 y 2007, el IPC presenta un crecimiento moderado y relativamente estable en un contexto de expansión económica previo a la crisis financiera internacional.
+A partir de 2008 se aprecia una ralentización del crecimiento del índice, coincidiendo con la crisis financiera global. Durante los años posteriores, el IPC muestra una evolución más contenida, e incluso episodios de escasa inflación, reflejando la debilidad de la demanda interna y el entorno económico adverso.
+A partir del 2021 se produce un cambio significativo en la dinámica de los precios. El gráfico refleja un fuerte repunte del IPC, que se intensifica especialmente en 2022. Este aumento está asociado a la recuperación económica tras la pandemia de la COVID-19, a los problemas en las cadenas de suministro y al fuerte encarecimiento de la energía como consecuencia de la guerra entre Rusia y Ucrania. En los años posteriores, aunque el ritmo de crecimiento se modera, el nivel de precios se mantiene claramente por encima de los valores previos a la pandemia.
+En conjunto, el gráfico pone de manifiesto que la inflación en España no ha seguido una trayectoria homogénea, sino que ha estado marcada por distintos episodios económicos. La utilización de un índice con base 2002 permite visualizar de forma clara el impacto acumulado de estos acontecimientos sobre el nivel general de precios y sirve como punto de partida para el análisis regional desarrollado en los apartados siguientes.
+
+
+## 1.2 Evolución del IPC en España con columnas
+
+
+```{r}
+#| label: plot-columnas
+
+plot_columnas <- original %>% 
+  filter(ccaa == "Nacional") %>% 
+  mutate(texto_tooltip = paste0(
+    "<b>Año:</b> ", periodo, "<br>",
+    "<b>IPC:</b> ", round(valor, 2)
+  )) %>%
+  ggplot(aes(x = periodo, y = valor)) +
+  geom_col(aes(fill = valor, text = texto_tooltip), width = 0.8) +
+  scale_fill_gradient(low = "#A3C1DA", high = "#B22222") +
+  
+  labs(
+    title = "Evolución del IPC en España (Barras)",
+    x = "Año",
+    y = "Índice"
+  ) +
+  
+  theme_minimal() +
+  theme(
+    legend.position = "none", # Ocultamos la leyenda
+    panel.grid.major.x = element_blank() # Quitamos rejilla vertical
+  )
+
+# Convertir a interactivo
+ggplotly(plot_columnas, tooltip = "text")
+
+```
+
+
+## 1.3 Evolución IPC General vs Subyacente 
+
+```{r}
+
+ruta_ccaa_inflacion_subyacente <- "./datos/inflacion_subyacente.csv"
+
+inflacion_subyacente <- rio::import(ruta_ccaa_inflacion_subyacente)
+
+str(inflacion_subyacente)
+
+inflacion_subyacente <- inflacion_subyacente %>%  drop_na()
+
+inflacion_subyacente_an <- inflacion_subyacente %>% rename(indice = c(1), ccaa = c(2), periodo = PERIODO, valor = VALOR) %>% 
+  mutate(indice = gsub("Tipo de dato", "Var_anual_sub", indice),
+         ccaa = gsub("Variación anual", "Nacional", ccaa),
+         valor = gsub(",", ".", valor))
+
+inflacion_subyacente_an <- inflacion_subyacente_an %>% select(c(1,2,7,8))
+
+inflacion_subyacente_an <- inflacion_subyacente_an %>% mutate(periodo = gsub("M12", "", periodo),
+                                                              periodo = gsub("M11", "", periodo),
+                                                              periodo = gsub("M10", "", periodo),
+                                                              periodo = gsub("M09", "", periodo),
+                                                              periodo = gsub("M08", "", periodo),
+                                                              periodo = gsub("M07", "", periodo),
+                                                              periodo = gsub("M06", "", periodo),
+                                                              periodo = gsub("M05", "", periodo),
+                                                              periodo = gsub("M04", "", periodo),
+                                                              periodo = gsub("M03", "", periodo),
+                                                              periodo = gsub("M02", "", periodo),
+                                                              periodo = gsub("M01", "", periodo))
+
+inflacion_comp <- full_join(inflacion_subyacente_an, ccaa_inflacion_an)
+
+inflacion_comp <- inflacion_comp %>% mutate(valor = as.numeric(valor))
+
+inflacion_compa <- inflacion_comp %>%
+  group_by(periodo, indice) %>% 
+  summarise(valor_medio = mean(valor, na.rm = TRUE),
+    .groups = "drop")
+
+
+
+datos_economist <- inflacion_compa %>%
+  ungroup() %>%
+  mutate(periodo = as.numeric(periodo),
+    indice = str_trim(indice),
+    tipo_inflacion = case_when(
+      str_detect(indice, "sub") ~ "Inflación subyacente",
+      TRUE ~ "Inflación general"),
+    
+    texto_tooltip = paste0(
+      "<b>Año:</b> ", periodo, "<br>",
+      "<b>Tipo:</b> ", tipo_inflacion, "<br>",
+      "<b>Tasa:</b> ", round(valor_medio, 1), "%"
+    )
+  )
+
+p <- ggplot(datos_economist, aes(x = periodo, y = valor_medio, group = tipo_inflacion, text = texto_tooltip)) +
+  geom_hline(yintercept = seq(-2, 12, by = 2), color = "gray90", size = 0.5) +
+  geom_hline(yintercept = 0, color = "black", size = 0.8) +
+  geom_line(aes(color = tipo_inflacion), size = 1.2) +
+  scale_color_manual(values = c("Inflación general" = "#E3120B",
+    "Inflación subyacente" = "#006BA2")) +
+  scale_x_continuous(breaks = seq(2002, 2025, 2)) +
+  scale_y_continuous(position = "right") +
+  labs(title = "España: Variación anual (%) de la inflación (2002 - 2025)",
+    subtitle = "Evolución IPC General vs Subyacente",
+    x = "", y = "", color = "") +
+  theme_minimal(base_family = "Arial") +
+  theme(plot.title = element_text(face = "bold", size = 14),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_blank(),
+    legend.position = c(0.4, 0.2), 
+    legend.background = element_rect(
+      fill = "white", 
+      color = "black", 
+      size = 1,       
+      linetype = "solid"),
+    legend.margin = margin(t = 10, r = 10, b = 10, l = 10))
+
+ggplotly(p, tooltip = "text") %>% layout(legend = list(x = 0.05, 
+                                                       y = 0.95, 
+                                                       bgcolor = "rgba(255, 255, 255, 0.9)", 
+                                                       bordercolor = "black",borderwidth = 1))
+
+```
+
+## 1.4 Evolución por comunidades autónomas
+
+```{r}
+#| label: plot-ccaa
+
+
+#Mostramos gráficamente la evolución de la inflación anual por comunidades autónomas.
+ploty <- original %>% filter(ccaa != "Nacional") %>%
+  mutate(texto_tooltip = paste0(
+    "<b>Año:</b> ", periodo, "<br>",
+    "<b>IPC:</b> ", round(valor, 2), "<br>",
+    "<b>CCAA:</b> ", ccaa
+  )) %>%
+  ggplot(aes(x = periodo, y = valor, color = ccaa)) +
+  geom_line(linewidth = 1.1) +
+  labs(title = "Evolución IPC por CCAA (100 = 2002)",
+       caption = "Elaboración propia a partir del INE",
+       x = "Años",
+       y = "Num Indice") +
+  geom_text(data = original %>% filter(periodo %in% c(2025)), aes(label = ccaa), size = 3, hjust = 0, 
+            nudge_x = 0.2, fontface = "bold") +
+  geom_point(aes(text = texto_tooltip), color = "transparent", size = 0.5) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  NULL
+
+ggplotly(ploty, tooltip = "text")
+```
+
+
+Una vez analizada la evolución del IPC en el conjunto de España, este apartado se centra en el estudio de las diferencias regionales entre Comunidades Autónomas. El objetivo es comprobar si la evolución de los precios ha sido homogénea en todo el territorio o si existen divergencias significativas entre regiones.
+El gráfico muestra que, aunque todas las Comunidades Autónomas comparten una tendencia creciente del IPC a lo largo del período 2002–2025, la intensidad del aumento no es uniforme. Tras partir todas del mismo valor en el año base 2002, las trayectorias comienzan a separarse progresivamente, especialmente en los años más recientes.
+Hasta la crisis financiera de 2008, las diferencias entre comunidades son limitadas y las curvas presentan una evolución muy similar. Posteriormente, y de forma más marcada desde 2021, se observa una mayor dispersión entre regiones, reflejando un impacto desigual del repunte inflacionario reciente.
+En el último año del período analizado (2025), algunas Comunidades Autónomas alcanzan niveles del IPC claramente superiores a la media nacional, mientras que otras se sitúan en posiciones relativamente más moderadas. Las etiquetas incorporadas en el gráfico permiten identificar la posición relativa de cada territorio y facilitan la comparación entre Comunidades Autónomas.
+Estas diferencias regionales sugieren que factores como la estructura productiva, la dependencia energética, el peso del turismo o los patrones de consumo han condicionado de manera distinta la evolución de los precios en cada comunidad. Este análisis regional sirve de base para identificar, en los apartados siguientes, las Comunidades Autónomas con mayores y menores niveles de inflación acumulada.
+
+## 1.5 Evolución de la inflación por tipos de bienes
+
+```{r}
+
+#| label: plot-tipo-bienes
+
+ruta_ccaa_inflacion <- "./datos/inflacion_articulos.csv"
+
+inflacion_articulos <- rio::import(ruta_ccaa_inflacion)
+
+inflacion_articulos <- inflacion_articulos %>% drop_na()
+
+articulos_2025 <- inflacion_articulos %>% rename(CCAA = c(1), articulo = c(2), tipo = c(3), periodo = c(4), valor = c(5)) %>% 
+  mutate(valor = gsub(",", ".", valor))
+
+articulos_2025 <- articulos_2025 %>% filter(tipo %in% "Variación en lo que va de año") %>% 
+  filter(CCAA %in% "Nacional") %>% 
+  filter(periodo %in% c("2025M01", "2025M02", "2025M03", "2025M04", "2025M05", "2025M06", "2025M07", "2025M08", "2025M09", "2025M10", "2025M11",  "2025M12")) %>% 
+  arrange(desc(periodo))
+
+
+
+articulos_2025 <- articulos_2025 %>% mutate(articulo = gsub("01", "", articulo),
+                                            articulo = gsub("02", "", articulo),
+                                            articulo = gsub("03", "", articulo),
+                                            articulo = gsub("04", "", articulo),
+                                            articulo = gsub("05", "", articulo),
+                                            articulo = gsub("06", "", articulo),
+                                            articulo = gsub("07", "", articulo),
+                                            articulo = gsub("08", "", articulo),
+                                            articulo = gsub("09", "", articulo),
+                                            articulo = gsub("10", "", articulo),
+                                            articulo = gsub("11", "", articulo),
+                                            articulo = gsub("12", "", articulo),
+                                            periodo = case_when(
+                                              periodo == "2025M01" ~ "Enero",
+                                              periodo == "2025M02" ~ "Febrero",
+                                              periodo == "2025M03" ~ "Marzo",
+                                              periodo == "2025M04" ~ "Abril",
+                                              periodo == "2025M05" ~ "Mayo",
+                                              periodo == "2025M06" ~ "Junio",
+                                              periodo == "2025M07" ~ "Julio",
+                                              periodo == "2025M08" ~ "Agosto",
+                                              periodo == "2025M09" ~ "Septiembre",
+                                              periodo == "2025M10" ~ "Octubre",
+                                              periodo == "2025M11" ~ "Noviembre",
+                                              periodo == "2025M12" ~ "Diciembre",
+                                              TRUE ~ periodo),
+                                            valor = as.numeric(valor))
+
+
+
+nombres_cortos <- c(
+  "Vestido y calzado" = "Ropa",
+  "Vivienda, agua, electricidad, gas y otros combustibles" = "Vivienda y Energía",
+  "Muebles, artículos del hogar y artículos para el mantenimiento corriente del hogar" = "Hogar",
+  "Alimentos y bebidas no alcohólicas" = "Alimentación")
+
+datos_grafico <- articulos_2025 %>%
+  filter(periodo == "Noviembre") %>% 
+  mutate(
+    articulo = fct_reorder(articulo, valor),
+    
+    # Asegúrate que el nombre "Nacional" es EXACTO a como sale en tus datos
+    es_nacional = if_else(articulo == "Nacional" | articulo == "General", "Si", "No"),
+    
+    texto_tooltip = paste0(
+      "<b>Artículo:</b> ", articulo, "<br>",
+      "<b>Crecimiento:</b> ", round(valor, 2), "%"
+    )
+  )
+
+# COMPROBACIÓN: Si esto da error, el problema es que la columna no se creó.
+# Si sale una lista de textos, todo está bien.
+head(datos_grafico$texto_tooltip)
+
+# 2. Hacemos el gráfico leyendo de 'datos_grafico'
+graf_final <- ggplot(datos_grafico, aes(x = articulo, y = valor)) +
+  
+  # CAPA 1: Todas las barras (Gradiente) - Filtramos para NO pintar el nacional
+  geom_col(data = filter(datos_grafico, es_nacional == "No"),
+           aes(fill = valor, 
+               text = texto_tooltip), # Aquí lee texto_tooltip de datos_grafico
+           width = 0.8) +
+  
+  scale_fill_gradient(low = "#A3C1DA", high = "#B22222") +
+  
+  # CAPA 2: Solo Nacional (Gris) - Filtramos para pintar SOLO el nacional
+  geom_col(data = filter(datos_grafico, es_nacional == "Si"),
+           aes(text = texto_tooltip), # Aquí TAMBIÉN lee texto_tooltip de datos_grafico
+           fill = "grey", 
+           width = 0.8) +
+  
+  labs(
+    title = "Evolución IPC 2025",
+    x = "",
+    y = "Crecimiento (%)"
+  ) +
+  
+  theme_minimal() +
+  coord_flip() +
+  theme(
+    legend.position = "none", 
+    panel.grid.major.y = element_blank()
+  )
+
+ggplotly(graf_final, tooltip = "text")
+
+```
+
+
+Los bienes y servicios que más se han encarecido en lo que llevamos de año 2025 son la vivienda y suministros energéticos, restaurantes y hoteles y las bebidas alcohólicas y el tabaco, con un crecimiento respecto de comienzos de año del 5,1, 4,4, y 3,6 puntos porcentuales.
+
+No es de extrañar que la vivienda aparezca en primer lugar como bien que más se ha encarecido en lo que llevamos de año, está en el punto de mira por su cualidad esencial como garante social y económico.
+
+
+# 2. DIFERENCIAS EN INFLACIÓN ACUMULADA POR CCAA
+
+## 2.1 TOP 3 Comunidades Autónomas más inflacionistas
+
+```{r}
+#| label: top3-ccaa
+
+#Para ello primero debemos de calcular la media
+
+inflacion_media <- original %>%
+  filter(ccaa != "Nacional",
+         periodo == 2025) %>% 
+  group_by(ccaa) %>%
+  summarise(acu_inflacion = valor - 100,
+            media_inflacion = (valor - 100)/23) %>%
+  arrange(desc(media_inflacion))
+
+top_3_altas <- inflacion_media %>%
+  slice_max(order_by = acu_inflacion, n = 3) %>%
+  mutate(tipo = "Top 3 con mayor inflación acumulada")
+
+top_3_bajas <- inflacion_media %>%
+  slice_min(order_by = acu_inflacion, n = 3) %>%
+  mutate(tipo = "Top 3 con menor inflación acumulada")
+
+top_3 <- bind_rows(top_3_altas, top_3_bajas)
+
+top_3 <- ggplot(top_3,
+       aes(x = reorder(ccaa, media_inflacion), 
+           y = media_inflacion, 
+           fill = tipo)) +
+  
+  geom_col(width = 0.6, alpha = 0.9) +
+  
+  geom_text(aes(label = paste0(round(media_inflacion, 2), " %")), 
+            hjust = -0.2, size = 4, family = "serif") +
+  
+  coord_flip() +
+  
+  labs(
+    title = "Las 3 CCAA con mayor y menor inflación acumulada (2002 - 2025)",
+    x = "Comunidad Autónoma",
+    y = NULL,
+    caption = "Elaboración propia a partir de datos del INE"
+  ) +
+  
+  scale_fill_manual(values = c(
+    "Top 3 con mayor inflación acumulada" = "orchid",
+    "Top 3 con menor inflación acumulada" = "skyblue"
+  )) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 14, hjust = 0.5, colour = "gray30"),
+    axis.text = element_text(family = "serif", size = 10, colour = "gray17"),
+    axis.title = element_text(size = 13, family = "serif"),
+    plot.caption = element_text(hjust = 0.5),
+    panel.grid.major = element_line(colour = "gray87", linetype = "dashed"),
+    panel.background = element_rect(fill = "white"),
+    panel.grid.minor = element_blank())
+
+top_3
+```
+
+Las 3 comunidades autónomas con mayor inflación acumulada para el periodo analizado son Cataluña que lidera la tabla con una tasa media anual del 3,2%, seguida del País Vasco y La Rioja, con tasas medias anuales del 2,98% y 2,95% respectivamente.
+
+Por otro lado, las 3 comunidades autónomas con menor inflación acumulada son Extremadura, Ceuta y Canarias, con valores del 2,64%, 2,54% y 2,36% respectivamente.
+
+## 2.2 Mapa coroplético de inflación media
+
+```{r}
+#| label: mapa-coropletico
+
+#obtener geometrias de las ccaa
+geometria_ccaa <- esp_get_ccaa(moveCAN = TRUE)
+
+#Arreglar nombres que estoy harta porque no coinciden los que tenemos con el paquete de mapSpain
+geometria_ccaa <- geometria_ccaa %>%
+  mutate(ccaa_match = case_when(
+    ine.ccaa.name == "País Vasco" ~ "PV",
+    ine.ccaa.name == "Cataluña" ~ "CAT",
+    ine.ccaa.name == "Castilla y León" ~ "CyL",
+    ine.ccaa.name == "Murcia, Región de" ~ "Murcia",
+    ine.ccaa.name == "Andalucía" ~ "Andalucia",
+    ine.ccaa.name == "Aragón" ~ "Aragon",
+    ine.ccaa.name == "Comunitat Valenciana" ~ "Comunidad Valenciana",
+    ine.ccaa.name == "Balears, Illes" ~ "Islas Baleares",
+    ine.ccaa.name == "Castilla - La Mancha" ~ "Castilla La Mancha",
+    ine.ccaa.name == "Madrid, Comunidad de" ~ "Madrid",
+    ine.ccaa.name == "Navarra, Comunidad Foral de" ~ "Navarra",
+    ine.ccaa.name == "Rioja, La" ~ "La Rioja",
+    ine.ccaa.name == "Asturias, Principado de" ~ "Asturias",
+    TRUE ~ ine.ccaa.name # El resto (Canarias, Cantabria, Galicia, Extremadura, Ceuta, Melilla) suelen coincidir
+  ))
+
+#Unir los datos con la inflación media al mapa
+mapa_final <- geometria_ccaa %>%
+  left_join(inflacion_media, by = c("ccaa_match" = "ccaa"))
+
+#Creación de la coropleta:
+plot_mapa <- ggplot(mapa_final) +
+  geom_sf(aes(fill = media_inflacion), color = "white", size = 0.2) +
+  scale_fill_viridis_c(option = "magma", direction = -1, name = "IPC Medio\n(2002-2025)") +
+  labs(
+    title = "Distribución de la inflación en España (2002 - 2025)",
+    subtitle = "IPC medio anual para el periodo analizado",
+    caption = "Fuente: Elaboración propia a partir de datos INE y geometría mapSpain"
+  ) +
+  theme_void() + 
+  theme(
+    legend.position = c(0.1, 0.2), 
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5, color = "gray40")
+  )
+
+plot_mapa
+```
+
+Ilustrativamente este mapa muestra la distribución geográfica de la inflación medial anual para el periodo analizado. Se puede destacar que los países del norte son los que más inflación media anual han soportado para el periodo analizado, que también coincide con las regiones más avanzadas de la península.
+
+## 2.3  Desviaciones respecto a la media nacional
+
+```{r}
+#| label: barras-divergentes
+
+#Calculo inflación total acumulada, el crecimiento total del 2022 al 2025
+inflacion_acumulada <- original %>%
+  filter(periodo == 2025) %>%
+  select(ccaa, valor) %>%
+  rename(valor_2025 = valor) %>%
+  mutate(crecimiento_total = valor_2025 - 100)
+
+media_nacional_acumulada <- mean(inflacion_acumulada$crecimiento_total, na.rm = TRUE)
+
+#Calculo de la diferencia de cada uno respecto a la media:
+plot_barras_divergentes <- inflacion_acumulada %>%
+  filter(ccaa != "Nacional") %>%
+  mutate(
+    diferencia = crecimiento_total - media_nacional_acumulada,
+    tipo = ifelse(diferencia > 0, "Mayor inflación que la media", "Menor inflación que la media")
+  ) %>%
+  ggplot(aes(x = reorder(ccaa, diferencia), y = diferencia, fill = tipo)) +
+  geom_col() +
+  coord_flip() +
+  geom_text(
+    aes(label = round(diferencia, 1), 
+        hjust = ifelse(diferencia > 0, -0.2, 1.2)), 
+    size = 3.5, fontface = "bold") +
+  scale_fill_manual(values = c(
+    "Mayor inflación que la media" = "#B22222", 
+    "Menor inflación que la media" = "#228B22" )) +
+  labs(
+    title = "Desviación de la inflación acumulada 2002-2025",
+    subtitle = paste0("Diferencia en puntos porcentuales respecto a la media nacional (", round(media_nacional_acumulada, 1), "%)"),
+    x = "",
+    y = "Puntos de diferencia",
+    fill = "") +
+  theme_minimal() +
+  theme(
+    legend.position = "top", 
+    panel.grid.major.y = element_blank(),
+    axis.text.y = element_text(face = "bold"),
+    plot.title = element_text(face = "bold"))
+
+plot_barras_divergentes
+```
+
+
+Este gráfico muestra la desviación de la inflación acumulada del periodo de las distintas comunidades autónomas respecto la media nacional (65%) en puntos porcentuales.
+
+Cataluña es el país que mayor diferencia de mayor inflación respecto la media presenta, con 9 puntos porcentuales respecto la media nacional (65%), seguida del País Vasco y La Rioja con desviaciones de la inflación mayores que la media nacional del 3,6 y de 2,6 puntos porcentuales. También presentan una inflación acumulada mayor que la media nacional Cantabria, Galicia, Castilla y León, Murcia, Aragón, Madrid y Castilla La - Mancha. Como ya se ha comentado anteriormente, las regiones que mayor inflación han reportado en el periodo analizado son las comunidades más avanzadas del país.
+
+Por otra parte, Canarias es el país que menor inflación acumulada respecto la media presenta, con una desviación de 0,7 puntos porcentuales. Ligeramente por encima de esta se encuentran Ceuta y Extremadura.
+
+
+# 3.ESTABILIDAD Y VOLATILIDAD INFLACIONARIA
+
+## 3.1 Análisis de la volatilidad infflacionaria por comunidades autónomas
+
+
+```{r}
+#| label: plot-volatilidad
+
+ccaa_tasas <- original %>%
+  arrange(ccaa, periodo) %>%
+  group_by(ccaa) %>%
+  mutate(tasa_anual = (valor - lag(valor)) / lag(valor) * 100) %>%
+  ungroup() %>%
+  filter(!is.na(tasa_anual))
+
+df_volatilidad <- ccaa_tasas %>%
+  filter(ccaa != "Nacional") %>% 
+  group_by(ccaa) %>%
+  summarise(
+    Volatilidad_Std = sd(tasa_anual, na.rm = TRUE), 
+    Tasa_Maxima = max(tasa_anual, na.rm = TRUE),
+    Tasa_Minima = min(tasa_anual, na.rm = TRUE),
+    historia = list(tasa_anual)
+  ) %>%
+  ungroup() %>%
+  arrange(desc(Volatilidad_Std)) 
+
+tt_volatilidad <- df_volatilidad %>%
+  gt(rowname_col = "ccaa") %>%
+  
+  gt_plt_sparkline(
+    historia, 
+    type = "ref_median", 
+    palette = c(
+      line = "gray50",     
+      min = "#1f77b4",     
+      max = "#d62728",      
+      median = "#8c564b",  
+      last = "black")) %>%
+  cols_label(
+    Volatilidad_Std = md("**Volatilidad (σ)**"),
+    Tasa_Maxima = md("**Pico Máximo (%)**"),
+    Tasa_Minima = md("**Valle Mínimo (%)**"),
+    historia = md("**Tendencia Anual (2003-25)**")
+  ) %>%
+  fmt_number(
+    columns = starts_with(c("Volatilidad", "Tasa")), 
+    decimals = 2,
+    use_seps = FALSE) %>%
+  tab_header(
+    title = md(" **Análisis de la Volatilidad Inflacionaria por CCAA**"),
+    subtitle = md("Medición de la inestabilidad de la tasa de variación anual del IPC (2003–2025)")
+  ) %>%
+  data_color(
+    columns = Volatilidad_Std,
+    colors = scales::col_numeric(
+      palette = c("#A6D854", "#FFFFBF", "#FC8D59", "#D73027"), 
+      domain = range(df_volatilidad$Volatilidad_Std, na.rm = TRUE))) %>%
+  data_color(
+    columns = Tasa_Maxima,
+    colors = "white",
+    autocolor_text = TRUE
+  ) %>%
+  tab_style(
+    style = cell_fill(color = "#F0F8FF"),
+    locations = cells_body(
+      rows = 1,
+      columns = c(Tasa_Maxima, Tasa_Minima, historia) )) %>%
+  tab_footnote(
+    footnote = "La volatilidad se calcula como la desviación estándar (σ) de las tasas de inflación interanuales (2003-2025). Un valor mayor indica una mayor inestabilidad de precios.",
+    locations = cells_column_labels(columns = Volatilidad_Std)
+  ) %>%
+  gt_theme_538(quiet= TRUE) %>%
+  tab_source_note("Fuente: Elaboración propia a partir del INE. CCAA ordenadas de mayor a menor volatilidad.")
+
+tt_volatilidad
+```
+
+Mediante la tasa de variación anual del IPC por comunidades autónomas podemos analizar que regiones han presentado una mayor dispersión durante el periodo analizado medido por la desviación típica. Castilla la Mancha ha sido la comunidad autónoma que mayor volatilidad ha sufrido en todo el periodo, con una tasa de inflación máxima del 10,12% y una tasa mínima del -1,15%, seguida de Castilla y León con valores del 9,46% y del -0,92% respectivamente. Asimismo, la comunidad autónoma que menor volatilidad en la tasa de inflación ha presentado es el País Vasco, con una tasa de inflación anual máxima del 8,05% y una tasa de inflación anual mínima del -0,27%. Le sigue Madrid con valores del 7,54% y del -0,47% respectivamente.
+
+## 3.2 Mapa de calor de las tasas anuales de inflación
+
+```{r}
+#| label: heatmap-inflacion
+
+ccaa_tasas <- original %>%
+  arrange(ccaa, periodo) %>%
+  group_by(ccaa) %>%
+  mutate(
+    tasa_anual = (valor - lag(valor)) / lag(valor) * 100) %>%
+  ungroup() %>%
+  filter(!is.na(tasa_anual))
+
+#Heatmap d ela inflación:
+plot_heatmap <- ccaa_tasas %>% filter(ccaa != "Nacional") %>% 
+  ggplot(aes(x = periodo, y = reorder(ccaa, desc(ccaa)), fill = tasa_anual)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(
+    low = "dodgerblue", 
+    mid = "white", 
+    high = "firebrick", 
+    midpoint = 2,
+    name = "Tasa Inflación (%)"
+  ) +
+  scale_x_continuous(breaks = seq(2003, 2025, 2)) +
+  labs(
+    title = "Mapa de calor: intensidad inflacionaria 2003-2025",
+    subtitle = "Tasa de variación interanual del IPC por CCAA",
+    x = "Año",
+    y = "",
+    caption = "Rojo: alta inflación; Azul: deflación o inflación baja.") +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(), 
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "top",
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+plot_heatmap
+```
+
+El mapa de calor nos muestra para cada año del análisis, aquellos periodos (años) en los que la inflación ha tenido un mayor impacto. 
+
+Podemos observar como en el periodo de bonanza económica (antes de la gran recesión financiera), la escala de color se enrojecía hasta llegar el 2008 (marcada inflación) y durante el periodo post-crisis con las políticas de austeridad llevadas a cabo, la inflación se esparcía en unos rangos bajos y moderados con el color claro azul. Por último, con la llegada el shock de oferta y demanda de principios de esta década, el mapa se enrojecía en gran magnitud fruto de las altas cotas de inflación reportadas en dichos años.
+
+## 3.3 Análisis de estabilidad
+
+```{r}
+#| label: tabla-estabilidad
+
+tabla_estabilidad <- ccaa_tasas %>%
+  group_by(ccaa) %>%
+  summarise(
+    Media_Anual = mean(tasa_anual, na.rm = TRUE),
+    Pico_Maximo = max(tasa_anual, na.rm = TRUE),
+    Año_Pico = periodo[which.max(tasa_anual)],
+    historia = list(tasa_anual)
+  ) %>%
+  arrange(desc(Pico_Maximo)) %>%
+  gt() %>%
+  gt_plt_sparkline(historia, type = "ref_median") %>% 
+  cols_label(
+    ccaa = "Comunidad",
+    Media_Anual = "Media Anual (%)",
+    Pico_Maximo = "Pico Máximo (%)",
+    Año_Pico = "Año del Pico",
+    historia = "Tendencia (2003-25)"
+  ) %>%
+  fmt_number(columns = c(Media_Anual, Pico_Maximo), decimals = 2) %>%
+  tab_header(
+    title = md("**Análisis de Estabilidad de Precios**"),
+    subtitle = "Comparativa de tasas interanuales y picos históricos"
+  ) %>%
+  gt_theme_guardian() 
+
+tabla_estabilidad
+```
+
+Este gráfico muestra la estabilidad de los precios en las distintas comunidades autónomas del país.
+
+# 4.IMPACTO DEL SHOCK INFLACIONARIO, Impacto de la crisis inflacionaria 2001-2025
+
+## 4.1 Tabla con banderas que muestra el impacto
+
+```{r}
+#| label: tabla-crisis-flags
+
+#Impacto de la crisis reciente, tabla con banderas:
+datos_crisis <- original %>%
+  group_by(ccaa) %>% 
+  filter(periodo %in% c(2021, 2025)) %>%
+  filter(ccaa != "Nacional") %>%
+  select(ccaa, periodo, valor) %>%
+  pivot_wider(names_from = periodo, values_from = valor, names_prefix = "ano_") %>% 
+  mutate(
+    Crecimiento_Crisis = ((ano_2025 - ano_2021) / ano_2021) * 100
+  ) %>% 
+  ungroup()
+
+#Banderas desde la Wiki
+df_banderas <- data.frame(
+  ccaa = c("Andalucia", "Aragon", "Asturias", "Islas Baleares", "Canarias", 
+           "Cantabria", "CyL", "Castilla La Mancha", "CAT", "Comunidad Valenciana",
+           "Extremadura", "Galicia", "Madrid", "Murcia", "Navarra", "PV", 
+           "La Rioja", "Ceuta", "Melilla"),
+  url_bandera = c(
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/2/20/Flag_of_Andalucía.svg/2560px-Flag_of_Andalucía.svg.png", # Andalucia
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Flag_of_Aragon.svg/2560px-Flag_of_Aragon.svg.png",       # Aragon
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Flag_of_Asturias.svg/2560px-Flag_of_Asturias.svg.png",      # Asturias
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Flag_of_the_Balearic_Islands.svg/2560px-Flag_of_the_Balearic_Islands.svg.png", # Baleares
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Flag_of_the_Canary_Islands_%28simple%29.svg/2560px-Flag_of_the_Canary_Islands_%28simple%29.svg.png",   # Canarias
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0f/Flag_of_Cantabria_%28Official%29.svg/2560px-Flag_of_Cantabria_%28Official%29.svg.png",     # Cantabria
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Flag_of_Castile_and_León.svg/2560px-Flag_of_Castile_and_León.svg.png", # CyL
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Flag_of_Castile-La_Mancha.svg/2560px-Flag_of_Castile-La_Mancha.svg.png",    # CLM
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ce/Flag_of_Catalonia.svg/2560px-Flag_of_Catalonia.svg.png",     # CAT
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/1/16/Flag_of_the_Valencian_Community_%282x3%29.svg/2560px-Flag_of_the_Valencian_Community_%282x3%29.svg.png", # Com. valencia
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Flag_of_Extremadura%2C_Spain_%28with_coat_of_arms%29.svg/2560px-Flag_of_Extremadura%2C_Spain_%28with_coat_of_arms%29.svg.png", # Extremadura
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Flag_of_Galicia.svg/2560px-Flag_of_Galicia.svg.png",       # Galicia
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/Flag_of_the_Community_of_Madrid.svg/2560px-Flag_of_the_Community_of_Madrid.svg.png", # Madrid
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Bandera_de_Murcia2.0.png/2560px-Bandera_de_Murcia2.0.png",    # Murcia
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/3/36/Bandera_de_Navarra.svg/2560px-Bandera_de_Navarra.svg.png",    # Navarra
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/Flag_of_the_Basque_Country.svg/2560px-Flag_of_the_Basque_Country.svg.png",      # PV
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/d/db/Flag_of_La_Rioja_%28with_coat_of_arms%29.svg/2560px-Flag_of_La_Rioja_%28with_coat_of_arms%29.svg.png", # La Rioja
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d3/Flag_of_Ceuta.svg/2560px-Flag_of_Ceuta.svg.png", # Ceuta
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/Flag_of_Melilla.svg/2560px-Flag_of_Melilla.svg.png" # Melilla
+  )
+)
+
+#Unir los datos y crear la tabla:
+
+
+tabla_flags <- datos_crisis %>%
+  left_join(df_banderas, by = "ccaa") %>%
+  arrange(desc(Crecimiento_Crisis)) %>% # Ordenamos: arriba las que más han sufrido
+  select(url_bandera, ccaa, ano_2021, ano_2025, Crecimiento_Crisis) %>%
+  gt() %>%
+  #url a imagen
+gt_img_rows(columns = url_bandera, height = 25) %>% 
+  cols_label(
+    url_bandera = "",
+    ccaa = "Comunidad",
+    ano_2021 = "IPC 2021",
+    ano_2025 = "IPC 2025",
+    Crecimiento_Crisis = "Subida crisis (%)") %>%
+  fmt_number(columns = c(ano_2021, ano_2025, Crecimiento_Crisis), decimals = 4) %>%
+  data_color(
+    columns = Crecimiento_Crisis,
+    colors = scales::col_numeric(
+      palette = c("#FFDDC1", "#FF6961", "#8B0000"),
+      domain = NULL ) ) %>%
+  tab_header(
+    title = md("**Impacto de la crisis inflacionaria 2021-2025**"),
+    subtitle = "Crecimiento acumulado de precios en los últimos 4 años"
+  ) %>%
+  tab_source_note("Fuente: INE y Wikipedia (Banderas)") %>%
+  gt_theme_espn()
+
+tabla_flags
+```
+
+La tabla muestra el impacto que ha tenido el shock inflacionario respecto las distintas regiones españolas. A simple vista, parece que la tabla es errónea porqué todas las comunidades autónomas reportan el mismo incremento en dicho periodo. No obstante, a pesar de que los datos y cálculos están correctamente procesados, las diferencias entre las regiones son tan pequeñas (centésimas) que no se aprecia verdaderamente las diferencias. Sin embargo, se puede concluir que el shock inflacionario ha tenido una gran incidencia en las tasas de inflación acumulada en solo 4 años, siendo esta ligeramente mayor al 18%, un gran ajuste.
+
+
+# 5. COMPARATIVA EUROPEA
+
+
+```{r}
+#| label: comparativa europea
+
+options(scipen = 999)
+
+aa <- search_eurostat("HICP", type = "all")
+
+my_table <- "prc_hicp_aind"
+
+label_eurostat_tables(my_table) 
+
+df_orig <- get_eurostat(my_table, time_format = 'raw', keepFlags = TRUE)
+
+df_names <- names(df_orig)
+df_orig <- label_eurostat(df_orig, code = df_names, fix_duplicated = TRUE)     
+
+df <- df_orig
+
+df_ordenado <- df %>% select(sort(names(.)))
+
+datos <- df_ordenado %>% filter(unit %in% "Annual average index") %>% 
+  filter(coicop_code %in% "TOT_X_NRG_FOOD") %>% 
+  select(c(8:9:11:13))
+
+datos <- datos %>% 
+  filter(TIME_PERIOD %in% 2002:2024) %>%
+  group_by(geo_code) %>% 
+  arrange(TIME_PERIOD) %>% 
+  mutate(crecimiento_acu = (values / first(values) - 1) * 100,
+         crecimiento_acu = round(crecimiento_acu, 2)) %>%
+  ungroup() %>%
+  arrange(geo_code, desc(TIME_PERIOD))
+
+datos <- datos %>% drop_na()
+
+datos_ <- datos %>% select(1,2,7)
+
+
+datos__ <- datos_ %>%
+  filter(TIME_PERIOD == 2024) %>% 
+  filter(!geo_code %in% c("TR", "EA19", "EA20", "EA", "EEA", "XK", "EU")) %>% 
+  mutate(geo_code = gsub("EU27_2020", "EU", geo_code))
+
+graf_europa <- datos__ %>% 
+  mutate(geo_code = fct_reorder(geo_code, crecimiento_acu)) %>%
+  ggplot(aes(x = geo_code, y = crecimiento_acu)) +
+  geom_col(fill = "#4682B4", color = "black", width = 0.8) +
+  geom_col(data = datos__ %>% filter(geo_code %in% "ES"), fill = "#C9242B", color = "black", width = 0.8) + 
+  geom_col(data = datos__ %>% filter(geo_code %in% "EU"), fill = "#800080", color = "black", width = 0.8) +
+  labs(
+    title = "Comparativa inflación acumulada Europa (2002 - 2024)",
+    subtitle = "Inflación acumulada en puntos porcentuales",
+    caption = "Elaboración propia a partir de datos del Eurostat.",
+    x = NULL,
+    y = "Crecimiento Acumulado"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none", 
+    panel.grid.major.x = element_blank(),
+    axis.text = element_text(face = "bold"),
+    plot.title = element_text(color = "black", face = "bold"))
+
+
+graf_europa
+
+```
+
+ 
+# 6. IMPLICACIONES ECONÓMICAS
+
+## 6.1 Análisis de la cesta de la compra 2002 vs 2025
+
+
+```{r}
+#| label: tabla-cesta-compra
+cesta_compra <- original %>%
+  filter(periodo == 2025) %>%
+  filter(ccaa != "Nacional") %>%
+  select(ccaa, coste_actual = valor)
+
+#Gráfico de barras
+plot_dinero <- cesta_compra %>%
+  ggplot(aes(x = reorder(ccaa, coste_actual), y = coste_actual)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  geom_text(aes(label = paste0(round(coste_actual, 2), " €")), 
+            hjust = 1.2,
+            color = "white", fontface = "bold") +
+  labs(
+    title = "¿Cuánto equivalen hoy 100€ de 2002?",
+    subtitle = "Coste actual de una cesta de la compra que valía 100€ en 2002 por CCAA",
+    x = "",
+    y = "Euros (€)"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid.major.y = element_blank(), 
+    axis.text.x = element_blank(),
+    plot.title = element_text(size = 16, face = "bold"))
+
+plot_dinero
+```
+
+Medido el IPC como el valor del dinero en este caso, se puede apreciar la gran pérdida de poder adquisitivo que ha sufrido el euro respecto los bienes y servicios consumidos en el país. Más notablemente, en el año 2002 en Cataluña con los bienes y servicios que podías adquirir con 100 euros, hoy (2025) para poder comprar la misma cesta necesitas 174 euros. 
+
+
+```{r}
+
+#| label: salario real
+
+ruta <- "./datos/salario.csv"
+
+salarios <- rio::import(ruta)
+
+salarios_ <- salarios %>% 
+  select(nacionalidad = c(1), sexo = c(2), periodo = c(3), valor = c(4)) %>% 
+  mutate(valor = str_remove_all(valor, "\\.")) %>% # 1. Eliminar puntos de miles
+  mutate(valor = str_replace(valor, ",", "."))      # 2. Reemplazar coma por punto
+
+salarios_ <- salarios_ %>% filter(nacionalidad %in% "Total") %>% 
+  filter(sexo %in% "Ambos sexos")
+
+salarios_defi <- salarios_ %>% arrange() %>% 
+  filter(!is.na(valor)) %>% 
+  mutate(valor = as.numeric(valor))
+
+salarios_defi <- salarios_defi %>%
+  group_by(sexo) %>% # ¡Añade geo_code si tienes países!
+  arrange(periodo) %>% 
+  mutate(tasa_anual = ((valor - lag(valor)) / lag(valor)) * 100) %>% 
+  ungroup() %>% 
+  drop_na(tasa_anual)
+
+salarios_defi <- salarios_defi %>% select(1, 3, 5) %>%
+  mutate(periodo = as.character(periodo)) %>% 
+  mutate(tasa_anual = as.numeric(tasa_anual))
+
+
+ruta_ccaa_inflacion <- "./datos/ccaa_inflacion.csv"
+ccaa_inflacion <- rio::import(ruta_ccaa_inflacion)
+
+# SOLUCIÓN AL ERROR: Convertimos todas las columnas de texto de Latin-1 a UTF-8
+# Esto arregla la "\xcd" de "Índice" que rompía el gsub
+ccaa_inflacion <- ccaa_inflacion %>%
+  mutate(across(where(is.character), ~iconv(., from = "ISO-8859-1", to = "UTF-8"))) %>%
+  drop_na()
+
+ccaa_inflacion <- ccaa_inflacion %>% drop_na()
+
+ccaa_inflacion_an <- ccaa_inflacion %>% 
+  select(c(2, 3, 4, 5)) %>% 
+  rename(periodo = Periodo, indice = c(1))
+
+ccaa_inflacion_an <- ccaa_inflacion_an %>% 
+  mutate(valor = gsub(",", ".", Total)) 
+
+ccaa_inflacion_an <- ccaa_inflacion_an %>% mutate(periodo = gsub("M12", "", periodo),
+                                                  periodo = gsub("M11", "", periodo),
+                                                  periodo = gsub("M10", "", periodo),
+                                                  periodo = gsub("M09", "", periodo),
+                                                  periodo = gsub("M08", "", periodo),
+                                                  periodo = gsub("M07", "", periodo),
+                                                  periodo = gsub("M06", "", periodo),
+                                                  periodo = gsub("M05", "", periodo),
+                                                  periodo = gsub("M04", "", periodo),
+                                                  periodo = gsub("M03", "", periodo),
+                                                  periodo = gsub("M02", "", periodo),
+                                                  periodo = gsub("M01", "", periodo),
+                                                  indice = str_replace(indice, ".*Variaci.n anual.*", "Var_anual"))
+
+ccaa_inflacion_an <- ccaa_inflacion_an %>% rename(ccaa = c(2)) %>% 
+  filter(ccaa %in% "Nacional")
+
+ccaa_inflacion_an <- ccaa_inflacion_an %>% filter(indice %in% "Var_anual") %>% 
+  arrange(periodo)
+
+
+#-----
+
+
+ccaa_inflacion_an <- ccaa_inflacion_an %>% select(c(2, 3, 5)) %>% 
+  rename(tasa_anual = valor) %>% 
+  mutate(tasa_anual = as.numeric(tasa_anual))
+
+ccaa_inflacion_an <- ccaa_inflacion_an %>% 
+  group_by(ccaa, periodo) %>% 
+  arrange(desc(ccaa)) %>% 
+  summarise(tasa_anual = mean(tasa_anual, na.rm = TRUE)) %>% 
+  rename(nacionalidad = ccaa)
+
+
+cc <- full_join(
+  ccaa_inflacion_an, 
+  salarios_defi)
+
+cc <- cc %>% mutate(nacionalidad = str_replace(nacionalidad, "Nacional", "inflacion")) %>% 
+  mutate(nacionalidad = str_replace(nacionalidad, "Total", "salario_bruto"))
+
+dd <- cc %>% filter(periodo %in% c(2009:2023))
+
+plit <- dd %>% 
+  ggplot(aes(x = periodo, y = tasa_anual, group = nacionalidad)) +
+  geom_line(data = dd %>% filter(nacionalidad == "salario_bruto"), 
+            color = "#2c7bb6", 
+            linewidth = 1.5) +
+  geom_point(data = dd %>% filter(nacionalidad == "salario_bruto"), 
+             color = "#2c7bb6", 
+             size = 3) +
+  geom_line(data = dd %>% filter(nacionalidad == "inflacion"), 
+            color = "#d7191c", 
+            linewidth = 1.5) +
+  geom_point(data = dd %>% filter(nacionalidad == "inflacion"), 
+             color = "#d7191c", 
+             size = 3) +
+  theme_minimal(base_size = 14) + 
+  geom_hline(yintercept = 0, color = "black", linewidth = 1, linetype = "dashed") +
+  theme(
+    plot.title = element_text(face = "bold", size = 16, color = "#333333"),
+    plot.subtitle = element_text(size = 12, color = "#666666", margin = margin(b = 10)),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(), 
+    axis.text = element_text(color = "#444444"),
+    plot.background = element_rect(fill = "white", color = NA)
+  ) +
+  labs(title = "Evolución Salarios vs Inflación (2009 - 2023)",
+       subtitle = "Comparativa de la tasa anual por periodo",
+       y = "Tasa Anual (%)",
+       x = NULL,
+       caption = "Elaboración propia a partir de datos del INE")
+
+
+ee <- dd %>% pivot_wider(names_from = nacionalidad, values_from = tasa_anual)
+
+salario_real <- ee %>% mutate(salario_real = salario_bruto - inflacion)
+
+plity <- salario_real %>% mutate(periodo = as.numeric(as.character(periodo))) %>% 
+  ggplot(aes(x = periodo, y = salario_real)) +
+  geom_line(color = "#1a9850", linewidth = 1.5) +
+  geom_point(color = "#1a9850", size = 3) +
+  theme_minimal(base_size = 14) + 
+  geom_hline(yintercept = 0, color = "black", linewidth = 1, linetype = "dashed") +
+  theme(
+    plot.title = element_text(face = "bold", size = 16, color = "#333333"),
+    plot.subtitle = element_text(size = 12, color = "#666666", margin = margin(b = 10)),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(), 
+    axis.text = element_text(color = "#444444"),
+    plot.background = element_rect(fill = "white", color = NA)
+  ) +
+  labs(title = "Evolución Salario real (2009 - 2023)",
+       subtitle = "Comparativa de la tasa anual por periodo",
+       y = "Tasa Anual (%)",
+       x = NULL,
+       caption = "Elaboración propia a partir de datos del INE") +
+  scale_x_continuous(breaks = seq(2009, 2023, by = 1))
+
+
+
+
+plit
+
+```
+
+
+
+```{r}
+plity
+
+```
+
+
+
+# 7. ANÁLISIS ECONOMÉTRICO
+
+
+```{r}
+#| label: analisis econometrico
+#| eval: false
+
+
+inflacion_subyacente_serie <- inflacion_subyacente %>% rename(indice = c(1), ccaa = c(2), periodo = PERIODO, valor = VALOR) %>% 
+  mutate(indice = gsub("Tipo de dato", "Var_anual_sub", indice),
+         ccaa = gsub("Variación anual", "Nacional", ccaa),
+         valor = gsub(",", ".", valor))
+
+inflacion_subyacente_serie <- inflacion_subyacente_serie %>% select(c(1,2,7,8))
+
+inflacion_serie <- ccaa_inflacion %>% 
+  mutate(indice = str_replace(indice, ".*Variaci.n anual.*", "Var_anual")) %>% 
+  filter(indice %in% "Var_anual") %>% 
+  filter(ccaa %in% "Nacional")
+
+
+merge_serie <- full_join(inflacion_serie, inflacion_subyacente_serie) 
+
+str(inflacion_serie)
+str(inflacion_subyacente_serie)
+
+merge_serie <- merge_serie %>% pivot_wider(names_from = indice, values_from = valor) %>% 
+  mutate(Var_anual = as.numeric(Var_anual))
+
+
+merge_serie <- merge_serie %>%
+  mutate(fecha = as.Date(paste0(gsub("M", "-", periodo), "-01")), 
+         Var_anual = as.numeric(Var_anual),
+         Var_anual_sub = as.numeric(Var_anual_sub)
+  ) %>%
+  arrange(fecha)
+
+ts_cpi <- ts(merge_serie$Var_anual, start = c(2002, 1), frequency = 12)
+ts_core <- ts(merge_serie$Var_anual_sub, start = c(2002, 1), frequency = 12)
+
+autoplot(ts_cpi, series = "Inflación General") +
+  autolayer(ts_core, series = "Inflación Subyacente") +
+  ggtitle("Tasa anual inflación España") +
+  ylab("% Cambio") +
+  theme_minimal()
+
+model_cpi <- auto.arima(ts_cpi, seasonal = TRUE) 
+
+summary(model_cpi)
+
+checkresiduals(model_cpi)
+
+forecast_cpi <- forecast(model_cpi, h = 12)
+
+plot(forecast_cpi, main = "Predicción: Inflación General")
+
+
+model_core <- auto.arima(ts_core, seasonal = TRUE)
+summary(model_core)
+
+checkresiduals(model_core)
+
+forecast_core <- forecast(model_core, h = 12)
+plot(forecast_core, main = "Predicción: Inflación subyacente")
+
+
+print(forecast_cpi)
+print(forecast_core)
+
+
+results_table <- data.frame(
+  Month = 1:12, 
+  General_CPI = as.numeric(forecast_cpi$mean),
+  Core_Inflation = as.numeric(forecast_core$mean))
+
+results_table
+
+#-------------------------------------------------------------------------------
+
+autoplot(forecast_cpi, 
+         ts.colour = "#2C3E50",      
+         predict.colour = "#E31A1C",
+         conf.int.fill = "#A6CEE3",   
+         lwd = 1) +                         
+  coord_cartesian(xlim = c(2020, 2026.5)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") + 
+  geom_vline(xintercept = 2025, linetype = "dotted", color = "gray50") + 
+  labs(
+    title = "Proyección de la Inflación General (CPI)",
+    subtitle = "Predicción ARIMA(0,1,1)(0,0,1)[12] con intervalos de confianza (80% y 95%)",
+    x = NULL, 
+    y = "Tasa de Variación Anual (%)",
+    caption = "Fuente: Elaboración propia a partir de datos del INE."
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 16, hjust = 0), # Alineado izquierda
+    plot.subtitle = element_text(size = 11, color = "gray40", margin = margin(b = 15)),
+    plot.caption = element_text(size = 8, color = "gray60", margin = margin(t = 10)),
+    axis.text = element_text(size = 10, color = "black"),
+    axis.title.y = element_text(margin = margin(r = 10)),
+    panel.grid.minor = element_blank(),   
+    panel.grid.major.x = element_blank(), 
+    axis.line.x = element_line(color = "black"))
+
+tabla_sencilla <- as.data.frame(forecast_cpi)
+
+tabla_sencilla$Fecha <- row.names(tabla_sencilla)
+
+tabla_sencilla <- tabla_sencilla[, c(6, 1:5)]
+
+tabla_sencilla <- tabla_sencilla %>% 
+  gt() %>%
+  tab_header(title = "Predicción Numérica IPC (2025-2026)") %>%
+  fmt_number(columns = 2:6, decimals = 2)
+
+tabla_sencilla
+
+```

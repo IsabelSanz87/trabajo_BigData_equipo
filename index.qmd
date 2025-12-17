@@ -1,0 +1,30 @@
+---
+title: Análisis de la inflación en España de 2002 a 2025           
+image: https://e01-elmundo.uecdn.es/assets/multimedia/imagenes/2022/09/14/16631707118193.jpg     
+about:
+  template: trestles        #- {jolla, solana, ...}
+  image-width: 16em         #- https://cybmeta.com/em-y-rem
+  image-shape: rectangle    #- {rectangle, round, rounded}
+  links:
+    - icon: envelope
+      text: e-mail
+      url: "isanzmi@alumni.uv.es"           
+    - icon: github
+      text: Github
+      href: https://github.com/IsabelSanz87         
+
+#- embeed the source document 
+code-tools: false
+---
+        
+Hola, somos Jaume, Isabel y Sara y vamos a realizar un ánalisis sobre la evolución de la inflación en España desde 2002 hasta 2025, con especial foco en las diferencias entre comunidades autónomas (CCAA). 
+      
+Esta web sirve para presentar el trabajo en equipo para la asignatura "Programación y manejo de datos en la era Del Big Data", optativa de GECO en la Facultad de Economía de la Universitat de València.
+
+La web de la asignatura está [aquí](https://perezp44.github.io/intro-ds-25-26-web/){target="_blank"} y los trabajos de mis compañeros de curso puedes verlos [aquí](https://perezp44.github.io/intro-ds-25-26-web/05-trabajos-estudiantes.html){target="_blank"}.
+
+
+Nuestro trabajo lleva por título : Análisis de la inflación en España 2002 2025. El objetivo es mostrar la evolución de la inflación, desgranando las divergencias que se encuentran en las distintas comunidades autónomas así como también el impacto y las implicaciones producidas. 
+
+
+El trabajo puede verse [aquí](my_trabajo_BigData.html){target="_blank"}, y las slides [aquí](my_slides_BigData.html){target="_blank"}.
