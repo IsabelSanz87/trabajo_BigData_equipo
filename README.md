@@ -10,7 +10,8 @@ La página web de la asignatura puede verse aquí: <https://perezp44.github.io/i
 
 
 <!-- En la linea de abajo HAS de SUSTITUIR "perezp44" por tu usuario de Github-->
-La versión final del trabajo puede visualizarse en: <https://IsabelSanz87.github.io/trabajo_BigData_equipo/>. 
+La versión final del trabajo puede visualizarse en: 
+<https://github.com/IsabelSanz87/trabajo_BigData_equipo.git>. 
 
 
 <!-- Abajo podéis escribir lo que queráis, igual un resumen del trabajo, o ..., o ... 
